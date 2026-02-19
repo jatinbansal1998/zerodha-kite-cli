@@ -65,8 +65,7 @@ func Code(err error) int {
 		return c.ExitCode()
 	}
 
-	var kErr kiteconnect.Error
-	if errors.As(err, &kErr) {
+	if kErr, ok := errors.AsType[kiteconnect.Error](err); ok {
 		switch kErr.ErrorType {
 		case kiteconnect.TokenError, kiteconnect.PermissionError, kiteconnect.TwoFAError:
 			return Auth
@@ -81,8 +80,7 @@ func Code(err error) int {
 		}
 	}
 
-	var nErr net.Error
-	if errors.As(err, &nErr) {
+	if _, ok := errors.AsType[net.Error](err); ok {
 		return Network
 	}
 

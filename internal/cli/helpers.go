@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -169,8 +168,7 @@ func callWithAuthRetry[T any](
 }
 
 func isTokenError(err error) bool {
-	var kErr kiteconnect.Error
-	if errors.As(err, &kErr) {
+	if kErr, ok := errors.AsType[kiteconnect.Error](err); ok {
 		return kErr.ErrorType == kiteconnect.TokenError ||
 			kErr.ErrorType == kiteconnect.PermissionError ||
 			kErr.ErrorType == kiteconnect.TwoFAError
@@ -184,10 +182,10 @@ func wrapKiteError(msg string, err error) error {
 
 func ensureProfileCredentials(profile *config.Profile) error {
 	if strings.TrimSpace(profile.APIKey) == "" {
-		return exitcode.New(exitcode.Config, "profile missing api_key; set via `zerodha config profile add`")
+		return exitcode.New(exitcode.Config, "profile missing api_key; set via `zerodha config profile add` or `zerodha config profile set-api-key`")
 	}
 	if strings.TrimSpace(profile.APISecret) == "" {
-		return exitcode.New(exitcode.Config, "profile missing api_secret; set via `zerodha config profile add`")
+		return exitcode.New(exitcode.Config, "profile missing api_secret; set via `zerodha config profile add` or `zerodha config profile set-api-secret`")
 	}
 	return nil
 }
@@ -199,23 +197,33 @@ func ensureAccessToken(profile *config.Profile) error {
 	return nil
 }
 
-func promptRequestToken(r io.Reader, w io.Writer) (string, error) {
-	if _, err := fmt.Fprintln(w, "Paste request_token (or full redirect URL):"); err != nil {
-		return "", err
-	}
-	scanner := bufio.NewScanner(r)
-	if !scanner.Scan() {
-		if err := scanner.Err(); err != nil {
-			return "", err
-		}
-		return "", errors.New("empty input")
+func validateAuthLoginFlags(
+	useCallback bool,
+	rawRequestToken string,
+	callbackPort int,
+	callbackPortChanged bool,
+) (string, error) {
+	if callbackPort < 1 || callbackPort > 65535 {
+		return "", exitcode.New(exitcode.Validation, "--callback-port must be between 1 and 65535")
 	}
 
-	token := extractRequestToken(scanner.Text())
-	if token == "" {
-		return "", errors.New("request_token is empty")
+	if callbackPortChanged && !useCallback {
+		return "", exitcode.New(exitcode.Validation, "--callback-port can only be used with --callback")
 	}
-	return token, nil
+
+	requestToken := extractRequestToken(rawRequestToken)
+	if useCallback {
+		if strings.TrimSpace(requestToken) != "" {
+			return "", exitcode.New(exitcode.Validation, "--request-token cannot be used with --callback")
+		}
+		return "", nil
+	}
+
+	if strings.TrimSpace(requestToken) == "" {
+		return "", exitcode.New(exitcode.Validation, "exactly one login mode is required: pass --request-token or --callback")
+	}
+
+	return requestToken, nil
 }
 
 func extractRequestToken(input string) string {

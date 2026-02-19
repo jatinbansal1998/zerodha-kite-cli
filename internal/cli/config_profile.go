@@ -47,9 +47,7 @@ func newConfigProfileCmd(opts *rootOptions) *cobra.Command {
 				return err
 			}
 
-			profile := ctx.cfg.Profiles[name]
-			profile.APIKey = strings.TrimSpace(addAPIKey)
-			profile.APISecret = strings.TrimSpace(addAPISecret)
+			profile := upsertProfileCredentials(ctx.cfg.Profiles[name], addAPIKey, addAPISecret)
 			ctx.setProfile(name, profile)
 			if ctx.cfg.ActiveProfile == "" || addSetActive {
 				ctx.cfg.ActiveProfile = name
@@ -77,6 +75,78 @@ func newConfigProfileCmd(opts *rootOptions) *cobra.Command {
 	addCmd.Flags().StringVar(&addAPIKey, "api-key", "", "Kite API key")
 	addCmd.Flags().StringVar(&addAPISecret, "api-secret", "", "Kite API secret")
 	addCmd.Flags().BoolVar(&addSetActive, "set-active", false, "Set this profile as active")
+
+	var setAPIKeyValue string
+	setAPIKeyCmd := &cobra.Command{
+		Use:   "set-api-key <name>",
+		Short: "Set only the API key for a profile",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := strings.TrimSpace(args[0])
+			if name == "" {
+				return exitcode.New(exitcode.Validation, "profile name cannot be empty")
+			}
+			if strings.TrimSpace(setAPIKeyValue) == "" {
+				return exitcode.New(exitcode.Validation, "--api-key is required")
+			}
+
+			ctx, err := updateExistingProfile(opts, name, func(profile *config.Profile) {
+				profile.APIKey = strings.TrimSpace(setAPIKeyValue)
+			})
+			if err != nil {
+				return err
+			}
+
+			printer := ctx.printer(cmd.OutOrStdout())
+			if printer.IsJSON() {
+				return printer.JSON(map[string]string{
+					"status":  "ok",
+					"profile": name,
+				})
+			}
+			return printer.KV([][2]string{
+				{"status", "ok"},
+				{"profile", name},
+			})
+		},
+	}
+	setAPIKeyCmd.Flags().StringVar(&setAPIKeyValue, "api-key", "", "Kite API key")
+
+	var setAPISecretValue string
+	setAPISecretCmd := &cobra.Command{
+		Use:   "set-api-secret <name>",
+		Short: "Set only the API secret for a profile",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := strings.TrimSpace(args[0])
+			if name == "" {
+				return exitcode.New(exitcode.Validation, "profile name cannot be empty")
+			}
+			if strings.TrimSpace(setAPISecretValue) == "" {
+				return exitcode.New(exitcode.Validation, "--api-secret is required")
+			}
+
+			ctx, err := updateExistingProfile(opts, name, func(profile *config.Profile) {
+				profile.APISecret = strings.TrimSpace(setAPISecretValue)
+			})
+			if err != nil {
+				return err
+			}
+
+			printer := ctx.printer(cmd.OutOrStdout())
+			if printer.IsJSON() {
+				return printer.JSON(map[string]string{
+					"status":  "ok",
+					"profile": name,
+				})
+			}
+			return printer.KV([][2]string{
+				{"status", "ok"},
+				{"profile", name},
+			})
+		},
+	}
+	setAPISecretCmd.Flags().StringVar(&setAPISecretValue, "api-secret", "", "Kite API secret")
 
 	listCmd := &cobra.Command{
 		Use:   "list",
@@ -199,7 +269,7 @@ func newConfigProfileCmd(opts *rootOptions) *cobra.Command {
 		},
 	}
 
-	profileCmd.AddCommand(addCmd, listCmd, useCmd, removeCmd)
+	profileCmd.AddCommand(addCmd, setAPIKeyCmd, setAPISecretCmd, listCmd, useCmd, removeCmd)
 	return profileCmd
 }
 
@@ -207,4 +277,28 @@ func upsertProfileCredentials(profile config.Profile, apiKey, apiSecret string) 
 	profile.APIKey = strings.TrimSpace(apiKey)
 	profile.APISecret = strings.TrimSpace(apiSecret)
 	return profile
+}
+
+func updateExistingProfile(
+	opts *rootOptions,
+	name string,
+	update func(*config.Profile),
+) (*commandContext, error) {
+	ctx, err := newCommandContext(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	profile, ok := ctx.cfg.Profiles[name]
+	if !ok {
+		return nil, exitcode.New(exitcode.Config, fmt.Sprintf("profile %q not found", name))
+	}
+
+	update(&profile)
+	ctx.setProfile(name, profile)
+	if err := ctx.save(); err != nil {
+		return nil, err
+	}
+
+	return ctx, nil
 }

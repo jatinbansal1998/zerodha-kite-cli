@@ -18,11 +18,26 @@ func newAuthCmd(opts *rootOptions) *cobra.Command {
 	var (
 		loginUseCallback bool
 		loginPort        int
+		loginRequest     string
 	)
 	loginCmd := &cobra.Command{
 		Use:   "login",
 		Short: "Login and persist access/refresh tokens for the selected profile",
+		Long: "Login and persist access/refresh tokens for the selected profile.\n\n" +
+			"Exactly one token acquisition mode is required:\n" +
+			"  - --request-token <token_or_redirect_url>\n" +
+			"  - --callback [--callback-port <1-65535>]",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			requestToken, err := validateAuthLoginFlags(
+				loginUseCallback,
+				loginRequest,
+				loginPort,
+				cmd.Flags().Changed("callback-port"),
+			)
+			if err != nil {
+				return err
+			}
+
 			ctx, err := newCommandContext(opts)
 			if err != nil {
 				return err
@@ -42,7 +57,6 @@ func newAuthCmd(opts *rootOptions) *cobra.Command {
 				return err
 			}
 
-			var requestToken string
 			if loginUseCallback {
 				if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Waiting for callback at http://127.0.0.1:%d/ (timeout: 2m)\n", loginPort); err != nil {
 					return err
@@ -50,12 +64,6 @@ func newAuthCmd(opts *rootOptions) *cobra.Command {
 				token, err := captureRequestToken(loginPort, 2*time.Minute)
 				if err != nil {
 					return exitcode.Wrap(exitcode.Auth, "failed to receive request_token via callback", err)
-				}
-				requestToken = token
-			} else {
-				token, err := promptRequestToken(cmd.InOrStdin(), cmd.OutOrStdout())
-				if err != nil {
-					return exitcode.Wrap(exitcode.Auth, "failed to read request_token", err)
 				}
 				requestToken = token
 			}
@@ -100,8 +108,9 @@ func newAuthCmd(opts *rootOptions) *cobra.Command {
 			})
 		},
 	}
-	loginCmd.Flags().BoolVar(&loginUseCallback, "callback", false, "Capture request_token from localhost callback")
-	loginCmd.Flags().IntVar(&loginPort, "callback-port", 8787, "Local callback port")
+	loginCmd.Flags().BoolVar(&loginUseCallback, "callback", false, "Capture request_token from localhost callback (cannot be used with --request-token)")
+	loginCmd.Flags().IntVar(&loginPort, "callback-port", 8787, "Local callback port (1-65535, only with --callback)")
+	loginCmd.Flags().StringVar(&loginRequest, "request-token", "", "Request token or full redirect URL (required unless --callback is used)")
 
 	renewCmd := &cobra.Command{
 		Use:   "renew",

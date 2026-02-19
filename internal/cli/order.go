@@ -141,8 +141,7 @@ func newOrderCmd(opts *rootOptions) *cobra.Command {
 			variety := normalizeVariety(cancelVariety)
 			var parentID *string
 			if strings.TrimSpace(parentOrderID) != "" {
-				parent := strings.TrimSpace(parentOrderID)
-				parentID = &parent
+				parentID = new(strings.TrimSpace(parentOrderID))
 			}
 
 			ctx, err := newCommandContext(opts)
