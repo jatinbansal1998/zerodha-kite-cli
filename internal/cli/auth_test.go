@@ -7,10 +7,12 @@ import (
 	"testing"
 
 	"github.com/jatinbansal1998/zerodha-kite-cli/internal/config"
+	"github.com/jatinbansal1998/zerodha-kite-cli/internal/updater"
 )
 
 func executeCLICommand(t *testing.T, configPath string, args ...string) (string, string, error) {
 	t.Helper()
+	t.Setenv(updater.DisableEnvVar, "1")
 
 	cmd := newRootCmd()
 	var stdout bytes.Buffer

@@ -1,7 +1,11 @@
 package cli
 
 import (
+	"os"
+
+	"github.com/jatinbansal1998/zerodha-kite-cli/internal/buildinfo"
 	"github.com/jatinbansal1998/zerodha-kite-cli/internal/paths"
+	"github.com/jatinbansal1998/zerodha-kite-cli/internal/updater"
 	"github.com/spf13/cobra"
 )
 
@@ -28,6 +32,11 @@ func newRootCmd() *cobra.Command {
 	rootCmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		return cmd.Help()
 	}
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
+		if shouldRunAutoUpdate(cmd) {
+			startAutoUpdate()
+		}
+	}
 
 	rootCmd.PersistentFlags().StringVar(&opts.profile, "profile", "", "Profile name (defaults to active profile)")
 	rootCmd.PersistentFlags().StringVar(&opts.configPath, "config", defaultConfigPath, "Path to config file")
@@ -35,11 +44,15 @@ func newRootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().BoolVar(&opts.debug, "debug", false, "Enable SDK HTTP debug logs")
 
 	rootCmd.AddCommand(
+		newSelfUpdateApplyCmd(),
 		newVersionCmd(),
 		newAuthCmd(opts),
 		newConfigCmd(opts),
 		newProfileCmd(opts),
 		newQuoteCmd(opts),
+		newInstrumentsCmd(opts),
+		newGttCmd(opts),
+		newMFCmd(opts),
 		newOrderCmd(opts),
 		newOrdersCmd(opts),
 		newPositionsCmd(opts),
@@ -48,4 +61,34 @@ func newRootCmd() *cobra.Command {
 	)
 
 	return rootCmd
+}
+
+func shouldRunAutoUpdate(cmd *cobra.Command) bool {
+	if cmd != nil && cmd.Name() == updater.HelperCommandName() {
+		return false
+	}
+
+	helperMode := os.Getenv(updater.HelperEnvVar)
+	return helperMode == ""
+}
+
+func startAutoUpdate() {
+	cacheDir, err := paths.DefaultCacheDir()
+	if err != nil {
+		return
+	}
+
+	executablePath, err := os.Executable()
+	if err != nil {
+		return
+	}
+
+	updater.StartBackground(updater.Options{
+		CurrentVersion: buildinfo.Version,
+		ExecutablePath: executablePath,
+		CacheDir:       cacheDir,
+		RepoOwner:      updater.DefaultRepoOwner,
+		RepoName:       updater.DefaultRepoName,
+		Cooldown:       updater.DefaultCooldown,
+	})
 }

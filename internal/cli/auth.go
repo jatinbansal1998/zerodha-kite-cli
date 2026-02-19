@@ -7,6 +7,7 @@ import (
 
 	"github.com/jatinbansal1998/zerodha-kite-cli/internal/exitcode"
 	"github.com/spf13/cobra"
+	kiteconnect "github.com/zerodha/gokiteconnect/v4"
 )
 
 func newAuthCmd(opts *rootOptions) *cobra.Command {
@@ -211,6 +212,74 @@ func newAuthCmd(opts *rootOptions) *cobra.Command {
 		},
 	}
 
-	authCmd.AddCommand(loginCmd, renewCmd, logoutCmd)
+	var revokeRefreshToken string
+	revokeRefreshCmd := &cobra.Command{
+		Use:   "revoke-refresh",
+		Short: "Invalidate a refresh token",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx, err := newCommandContext(opts)
+			if err != nil {
+				return err
+			}
+			profileName, profile, err := ctx.resolveProfile(true)
+			if err != nil {
+				return err
+			}
+			if strings.TrimSpace(profile.APIKey) == "" {
+				return exitcode.New(exitcode.Config, "profile missing api_key; set via `zerodha config profile add` or `zerodha config profile set-api-key`")
+			}
+			if err := ensureAccessToken(profile); err != nil {
+				return err
+			}
+
+			token := strings.TrimSpace(revokeRefreshToken)
+			storedToken := strings.TrimSpace(profile.RefreshToken)
+			if token == "" {
+				token = storedToken
+			}
+			if token == "" {
+				return exitcode.New(exitcode.Validation, "no refresh token to revoke; pass --refresh-token or login again to store one")
+			}
+
+			revoked, err := callWithAuthRetry(ctx, profileName, profile, func(client *kiteconnect.Client) (bool, error) {
+				return client.InvalidateRefreshToken(token)
+			})
+			if err != nil {
+				return err
+			}
+			if !revoked {
+				return exitcode.New(exitcode.API, "refresh token invalidation was not accepted")
+			}
+
+			refreshCleared := false
+			if storedToken != "" && token == storedToken {
+				profile.RefreshToken = ""
+				ctx.setProfile(profileName, *profile)
+				if err := ctx.save(); err != nil {
+					return err
+				}
+				refreshCleared = true
+			}
+
+			printer := ctx.printer(cmd.OutOrStdout())
+			if printer.IsJSON() {
+				return printer.JSON(map[string]any{
+					"status":                "ok",
+					"profile":               profileName,
+					"refresh_token_revoked": true,
+					"refresh_token_cleared": refreshCleared,
+				})
+			}
+			return printer.KV([][2]string{
+				{"status", "ok"},
+				{"profile", profileName},
+				{"refresh_token_revoked", "yes"},
+				{"refresh_token_cleared", boolToYesNo(refreshCleared)},
+			})
+		},
+	}
+	revokeRefreshCmd.Flags().StringVar(&revokeRefreshToken, "refresh-token", "", "Refresh token (defaults to stored profile refresh token)")
+
+	authCmd.AddCommand(loginCmd, renewCmd, logoutCmd, revokeRefreshCmd)
 	return authCmd
 }

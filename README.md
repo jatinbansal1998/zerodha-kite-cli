@@ -46,15 +46,35 @@ Manual mode and callback mode are mutually exclusive.
 3. Fetch data:
 ```bash
 zerodha profile show
+zerodha profile full
 zerodha quote get NSE:INFY NSE:TCS
+zerodha quote ltp NSE:INFY NSE:TCS
+zerodha quote ohlc NSE:INFY NSE:TCS
+zerodha quote historical --instrument-token 408065 --interval day --from 2026-01-01 --to 2026-02-01
+zerodha instruments list
+zerodha instruments list --exchange NSE
+zerodha instruments mf
+zerodha gtt list
+zerodha mf orders list
+zerodha mf sips list
+zerodha mf holdings
 zerodha orders list
+zerodha orders trades
+zerodha orders trades --order-id <order_id>
 zerodha positions
+zerodha positions convert --exchange NSE --symbol INFY --old-product CNC --new-product MIS --position-type day --txn BUY --qty 1
 zerodha holdings
+zerodha holdings auctions
+zerodha holdings auth-initiate --type equity --transfer-type pre
 zerodha margins --segment all
+zerodha margins order --exchange NSE --symbol INFY --txn BUY --type MARKET --product CNC --qty 1
+zerodha margins basket --exchange NSE --symbol INFY --txn BUY --type MARKET --product CNC --qty 1 --consider-positions
+zerodha margins charges --exchange NSE --symbol INFY --txn BUY --type MARKET --product CNC --qty 1 --avg-price 1500
 ```
 4. Place order:
 ```bash
 zerodha order place --exchange NSE --symbol INFY --txn BUY --type MARKET --product CNC --qty 1
+zerodha order exit --order-id <order_id> --variety regular
 ```
 
 ## Profile Commands
@@ -81,3 +101,13 @@ Invalid combinations:
 
 - `--request-token` and `--callback` together.
 - `--callback-port` explicitly set without `--callback`.
+
+Other session commands:
+
+- `zerodha auth renew` renews access token using stored refresh token.
+- `zerodha auth logout` invalidates access token (if possible) and clears local tokens.
+- `zerodha auth revoke-refresh [--refresh-token <token>]` invalidates refresh token (defaults to stored token).
+
+## SDK Coverage Tracking
+
+- Coverage and implementation plan are tracked in `SDK_COVERAGE_ROADMAP.md`.

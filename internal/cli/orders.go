@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"strings"
+
 	"github.com/jatinbansal1998/zerodha-kite-cli/internal/exitcode"
 	"github.com/spf13/cobra"
 	kiteconnect "github.com/zerodha/gokiteconnect/v4"
@@ -120,6 +122,69 @@ func newOrdersCmd(opts *rootOptions) *cobra.Command {
 	}
 	showCmd.Flags().StringVar(&showOrderID, "order-id", "", "Order ID")
 
-	ordersCmd.AddCommand(listCmd, showCmd)
+	var tradesOrderID string
+	tradesCmd := &cobra.Command{
+		Use:   "trades",
+		Short: "List trades (optionally filtered by order ID)",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx, err := newCommandContext(opts)
+			if err != nil {
+				return err
+			}
+			profileName, profile, err := ctx.resolveProfile(true)
+			if err != nil {
+				return err
+			}
+			if err := ensureAccessToken(profile); err != nil {
+				return err
+			}
+
+			orderID := strings.TrimSpace(tradesOrderID)
+			var trades []kiteconnect.Trade
+			if orderID == "" {
+				result, err := callWithAuthRetry(ctx, profileName, profile, func(client *kiteconnect.Client) (kiteconnect.Trades, error) {
+					return client.GetTrades()
+				})
+				if err != nil {
+					return err
+				}
+				trades = []kiteconnect.Trade(result)
+			} else {
+				result, err := callWithAuthRetry(ctx, profileName, profile, func(client *kiteconnect.Client) ([]kiteconnect.Trade, error) {
+					return client.GetOrderTrades(orderID)
+				})
+				if err != nil {
+					return err
+				}
+				trades = result
+			}
+
+			printer := ctx.printer(cmd.OutOrStdout())
+			if printer.IsJSON() {
+				return printer.JSON(trades)
+			}
+
+			rows := make([][]string, 0, len(trades))
+			for _, trade := range trades {
+				rows = append(rows, []string{
+					trade.TradeID,
+					trade.OrderID,
+					trade.TradingSymbol,
+					trade.Exchange,
+					trade.TransactionType,
+					formatFloat(trade.Quantity),
+					formatFloat(trade.AveragePrice),
+					trade.FillTimestamp.Time.Format("2006-01-02 15:04:05"),
+				})
+			}
+			if len(rows) == 0 {
+				rows = append(rows, []string{"-", "-", "-", "-", "-", "0.00", "0.00", "-"})
+			}
+			return printer.Table([]string{"TRADE_ID", "ORDER_ID", "SYMBOL", "EXCHANGE", "TXN", "QTY", "AVG_PRICE", "FILL_TIMESTAMP"}, rows)
+		},
+	}
+	tradesCmd.Flags().StringVar(&tradesOrderID, "order-id", "", "Filter trades for a specific order ID")
+
+	ordersCmd.AddCommand(listCmd, showCmd, tradesCmd)
 	return ordersCmd
 }

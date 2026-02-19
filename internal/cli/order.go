@@ -27,7 +27,7 @@ type orderFlags struct {
 func newOrderCmd(opts *rootOptions) *cobra.Command {
 	orderCmd := &cobra.Command{
 		Use:   "order",
-		Short: "Place/modify/cancel individual orders",
+		Short: "Place/modify/cancel/exit individual orders",
 	}
 
 	var placeFlags orderFlags
@@ -182,7 +182,62 @@ func newOrderCmd(opts *rootOptions) *cobra.Command {
 	cancelCmd.Flags().StringVar(&cancelVariety, "variety", kiteconnect.VarietyRegular, "Order variety")
 	cancelCmd.Flags().StringVar(&parentOrderID, "parent-order-id", "", "Parent order ID (for bracket/cover orders)")
 
-	orderCmd.AddCommand(placeCmd, modifyCmd, cancelCmd)
+	var exitOrderID string
+	var exitVariety string
+	var exitParentOrderID string
+	exitCmd := &cobra.Command{
+		Use:   "exit --order-id <id>",
+		Short: "Exit an order (alias of cancel in Kite)",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			orderID := strings.TrimSpace(exitOrderID)
+			if orderID == "" {
+				return exitcode.New(exitcode.Validation, "--order-id is required")
+			}
+			variety := normalizeVariety(exitVariety)
+			var parentID *string
+			if strings.TrimSpace(exitParentOrderID) != "" {
+				parentID = new(strings.TrimSpace(exitParentOrderID))
+			}
+
+			ctx, err := newCommandContext(opts)
+			if err != nil {
+				return err
+			}
+			profileName, profile, err := ctx.resolveProfile(true)
+			if err != nil {
+				return err
+			}
+			if err := ensureAccessToken(profile); err != nil {
+				return err
+			}
+
+			resp, err := callWithAuthRetry(ctx, profileName, profile, func(client *kiteconnect.Client) (kiteconnect.OrderResponse, error) {
+				return client.ExitOrder(variety, orderID, parentID)
+			})
+			if err != nil {
+				return err
+			}
+
+			printer := ctx.printer(cmd.OutOrStdout())
+			if printer.IsJSON() {
+				return printer.JSON(map[string]any{
+					"status":   "ok",
+					"order_id": resp.OrderID,
+					"variety":  variety,
+				})
+			}
+			return printer.KV([][2]string{
+				{"status", "ok"},
+				{"order_id", resp.OrderID},
+				{"variety", variety},
+			})
+		},
+	}
+	exitCmd.Flags().StringVar(&exitOrderID, "order-id", "", "Order ID")
+	exitCmd.Flags().StringVar(&exitVariety, "variety", kiteconnect.VarietyRegular, "Order variety")
+	exitCmd.Flags().StringVar(&exitParentOrderID, "parent-order-id", "", "Parent order ID (for bracket/cover orders)")
+
+	orderCmd.AddCommand(placeCmd, modifyCmd, cancelCmd, exitCmd)
 	return orderCmd
 }
 
