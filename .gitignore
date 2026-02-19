@@ -26,7 +26,14 @@ go.work.sum
 
 # env file
 .env
+.env.*
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+
+# macOS metadata
+.DS_Store
+
+# Local build artifacts
+zerodha
