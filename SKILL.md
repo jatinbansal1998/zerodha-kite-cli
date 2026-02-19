@@ -9,9 +9,26 @@ Translate a user query in plain English into one exact `zerodha` CLI command.
 
 Do not invent commands or flags. Use only commands defined here.
 
+# Bootstrap: CLI Installation
+
+If the user asks to install/setup the CLI, or reports `zerodha: command not found`, route to an installer command first.
+
+This is the only exception to "commands must start with `zerodha`".
+
+Install commands:
+
+- Linux/macOS (`curl`): `curl -fsSL https://raw.githubusercontent.com/jatinbansal1998/zerodha-kite-cli/main/scripts/install.sh | sh`
+- Linux/macOS (`wget`): `wget -qO- https://raw.githubusercontent.com/jatinbansal1998/zerodha-kite-cli/main/scripts/install.sh | sh`
+- Windows PowerShell: `irm https://raw.githubusercontent.com/jatinbansal1998/zerodha-kite-cli/main/scripts/install.ps1 | iex`
+- Windows CMD: `powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/jatinbansal1998/zerodha-kite-cli/main/scripts/install.ps1 | iex"`
+
+Post-install verification command:
+
+- `zerodha version`
+
 # Global Rules
 
-1. Always start commands with `zerodha`.
+1. Always start commands with `zerodha` (except install/bootstrap commands in "Bootstrap: CLI Installation").
 2. Prefer `--json` when the user asks for machine-readable output.
 3. Respect global flags when provided:
    - `--profile <name>`
@@ -27,6 +44,36 @@ Do not invent commands or flags. Use only commands defined here.
    - If missing, run `zerodha auth login ...`.
    - CLI auto-refreshes access token when refresh token exists.
 6. Never guess missing required fields for write actions; ask for the missing values.
+7. If OS is required for installation routing and missing, ask for only the OS (`linux`, `macos`, or `windows`).
+
+# Login Flow (Multi-Message)
+
+Use this flow when the user wants to authenticate and provides `api_key`, `api_secret`, and token across one or more messages.
+
+Collected auth fields (can arrive in any order):
+
+- `profile_name` (default to `default` if user does not specify)
+- `api_key`
+- `api_secret`
+- one login mode:
+  - `request_token_or_redirect_url`, or
+  - `callback` (optional `callback_port`)
+
+Rules:
+
+1. Persist auth fields provided in earlier user messages during the same login task.
+2. Ask only for missing required auth inputs for the next step.
+3. Do not emit `zerodha auth login ...` until profile credentials are configured.
+4. If `api_key` + `api_secret` are available and profile setup is needed, emit:
+   `zerodha config profile add <profile_name> --api-key <key> --api-secret <secret> --set-active`
+5. If user explicitly wants to update only one credential on an existing profile, emit:
+   - `zerodha config profile set-api-key <profile_name> --api-key <key>`
+   - `zerodha config profile set-api-secret <profile_name> --api-secret <secret>`
+6. For token mode, emit:
+   `zerodha auth login --request-token <token_or_redirect_url>`
+7. For callback mode, emit:
+   `zerodha auth login --callback [--callback-port <1-65535>]`
+8. If multiple commands are needed, output only the next runnable command.
 
 # Command Catalog
 
@@ -240,6 +287,10 @@ Use these mappings during intent parsing.
 - `renew` synonyms: `refresh access token`, `renew token`
 - `logout` synonyms: `sign out`, `clear session`
 
+## Bootstrap
+
+- `install cli` synonyms: `install zerodha cli`, `setup zerodha cli`, `command not found`, `zerodha not installed`
+
 ## Orders and tradebook
 
 - `order place` synonyms: `buy`, `sell`, `place order`, `new order`, `execute trade`
@@ -276,15 +327,25 @@ Use these mappings during intent parsing.
 
 # Routing Procedure
 
-1. Detect intent domain using synonyms.
-2. Pick the narrowest command path.
-3. Extract required entities/flags.
-4. Validate against constraints above.
-5. If fields are missing, ask for only missing required inputs.
-6. Output one runnable command string.
+1. Detect whether this is an install/bootstrap request, login/auth bootstrap request, or a normal `zerodha` command request.
+2. For install/bootstrap: pick the OS-specific installer command.
+3. For login/auth bootstrap: follow "Login Flow (Multi-Message)" and emit only the next runnable command.
+4. Otherwise detect intent domain using synonyms.
+5. Pick the narrowest command path.
+6. Extract required entities/flags.
+7. Validate against constraints above.
+8. If fields are missing, ask for only missing required inputs.
+9. Output one runnable command string.
 
 # Intent to Command Defaults
 
+- If user asks generic "install zerodha cli":
+  - Linux/macOS: `curl -fsSL https://raw.githubusercontent.com/jatinbansal1998/zerodha-kite-cli/main/scripts/install.sh | sh`
+  - Windows: `irm https://raw.githubusercontent.com/jatinbansal1998/zerodha-kite-cli/main/scripts/install.ps1 | iex`
+- If user asks generic "login" and no auth fields are provided:
+  - ask for `api_key` and `api_secret` first (profile defaults to `default` unless specified)
+- If user provides `api_key` + `api_secret` but no token/mode:
+  - emit profile setup command first, then ask for token mode (`--request-token` or `--callback`)
 - If user asks generic "show my profile": use `zerodha profile show`.
 - If user asks generic "show orders": use `zerodha orders list`.
 - If user asks generic "show trades": use `zerodha orders trades`.
@@ -297,6 +358,6 @@ Use these mappings during intent parsing.
 
 When responding with a routed command, return:
 
-1. `command`: exact CLI command
+1. `command`: exact runnable command (installer command for bootstrap, otherwise `zerodha ...`)
 2. `why`: one-line reason
 3. `missing`: required fields still missing (empty if none)
