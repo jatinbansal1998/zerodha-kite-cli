@@ -42,6 +42,7 @@ zerodha config profile set-api-secret default --api-secret <api_secret>
 zerodha auth login --request-token <request_token_or_redirect_url>
 ```
 Manual mode and callback mode are mutually exclusive.
+
 3. Fetch data:
 ```bash
 zerodha profile show
