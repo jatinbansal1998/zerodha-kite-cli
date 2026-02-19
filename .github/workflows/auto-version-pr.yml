@@ -28,7 +28,7 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Check whether version changed in this push
+      - name: Determine whether to skip auto-bump
         id: version_check
         run: |
           set -euo pipefail
@@ -38,23 +38,47 @@ jobs:
             if git rev-parse HEAD^ >/dev/null 2>&1; then
               before="$(git rev-parse HEAD^)"
             else
-              echo "changed=false" >>"$GITHUB_OUTPUT"
+              echo "skip=false" >>"$GITHUB_OUTPUT"
+              echo "reason=normal" >>"$GITHUB_OUTPUT"
               exit 0
             fi
           fi
 
-          if git diff --name-only "$before" "${{ github.sha }}" | grep -Fxq "internal/buildinfo/version.go"; then
-            echo "changed=true" >>"$GITHUB_OUTPUT"
+          changed_files="$(git diff --name-only "$before" "${{ github.sha }}")"
+
+          if printf '%s\n' "$changed_files" | grep -Fxq "internal/buildinfo/version.go"; then
+            echo "skip=true" >>"$GITHUB_OUTPUT"
+            echo "reason=version_file_changed" >>"$GITHUB_OUTPUT"
             exit 0
           fi
-          echo "changed=false" >>"$GITHUB_OUTPUT"
 
-      - name: Skip when version already changed
-        if: steps.version_check.outputs.changed == 'true'
-        run: echo "Version file already changed in this push. Skipping auto-bump."
+          non_markdown_files="$(printf '%s\n' "$changed_files" | sed '/^$/d' | grep -Evi '\.(md|markdown)$' || true)"
+          if [[ -z "$non_markdown_files" ]]; then
+            echo "skip=true" >>"$GITHUB_OUTPUT"
+            echo "reason=markdown_only" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "skip=false" >>"$GITHUB_OUTPUT"
+          echo "reason=normal" >>"$GITHUB_OUTPUT"
+
+      - name: Skip when auto-bump is not needed
+        if: steps.version_check.outputs.skip == 'true'
+        run: |
+          case "${{ steps.version_check.outputs.reason }}" in
+            version_file_changed)
+              echo "Version file already changed in this push. Skipping auto-bump."
+              ;;
+            markdown_only)
+              echo "Only markdown files changed in this push. Skipping auto-bump."
+              ;;
+            *)
+              echo "Skipping auto-bump."
+              ;;
+          esac
 
       - name: Format Go sources
-        if: steps.version_check.outputs.changed != 'true'
+        if: steps.version_check.outputs.skip != 'true'
         run: |
           set -euo pipefail
           files="$(git ls-files '*.go')"
@@ -63,20 +87,20 @@ jobs:
           fi
 
       - name: Tidy modules
-        if: steps.version_check.outputs.changed != 'true'
+        if: steps.version_check.outputs.skip != 'true'
         run: |
           set -euo pipefail
           go mod tidy
 
       - name: Bump patch version
-        if: steps.version_check.outputs.changed != 'true'
+        if: steps.version_check.outputs.skip != 'true'
         run: |
           set -euo pipefail
           ./scripts/bump_version.sh patch
 
       - name: Read bumped version
         id: bumped
-        if: steps.version_check.outputs.changed != 'true'
+        if: steps.version_check.outputs.skip != 'true'
         run: |
           set -euo pipefail
           version="$(awk -F'"' '/var Version = "/ {print $2; exit}' internal/buildinfo/version.go)"
@@ -87,7 +111,7 @@ jobs:
           echo "version=$version" >>"$GITHUB_OUTPUT"
 
       - name: Create pull request
-        if: steps.version_check.outputs.changed != 'true'
+        if: steps.version_check.outputs.skip != 'true'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -102,4 +126,3 @@ jobs:
             - patch bump in `internal/buildinfo/version.go`
           branch: chore/auto-version-bump
           delete-branch: true
-
