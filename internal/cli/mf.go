@@ -101,10 +101,15 @@ func newMFCmd(opts *rootOptions) *cobra.Command {
 
 	var listFrom string
 	var listTo string
+	var listLimit int
 	orderListCmd := &cobra.Command{
 		Use:   "list",
 		Short: "List mutual fund orders",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateLimit(listLimit); err != nil {
+				return err
+			}
+
 			from := strings.TrimSpace(listFrom)
 			to := strings.TrimSpace(listTo)
 			if (from == "") != (to == "") {
@@ -144,6 +149,7 @@ func newMFCmd(opts *rootOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			orders = applyLimit(orders, listLimit)
 
 			printer := ctx.printer(cmd.OutOrStdout())
 			if printer.IsJSON() {
@@ -170,6 +176,7 @@ func newMFCmd(opts *rootOptions) *cobra.Command {
 	}
 	orderListCmd.Flags().StringVar(&listFrom, "from", "", "Start date (YYYY-MM-DD)")
 	orderListCmd.Flags().StringVar(&listTo, "to", "", "End date (YYYY-MM-DD)")
+	orderListCmd.Flags().IntVar(&listLimit, "limit", 0, "Limit number of rows (0 = no limit)")
 
 	var showOrderID string
 	orderShowCmd := &cobra.Command{
@@ -442,10 +449,15 @@ func newMFCmd(opts *rootOptions) *cobra.Command {
 	}
 	sipCancelCmd.Flags().StringVar(&cancelSipID, "sip-id", "", "SIP ID")
 
+	var sipListLimit int
 	sipListCmd := &cobra.Command{
 		Use:   "list",
 		Short: "List mutual fund SIPs",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateLimit(sipListLimit); err != nil {
+				return err
+			}
+
 			ctx, err := newCommandContext(opts)
 			if err != nil {
 				return err
@@ -464,6 +476,7 @@ func newMFCmd(opts *rootOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			sips = applyLimit(sips, sipListLimit)
 
 			printer := ctx.printer(cmd.OutOrStdout())
 			if printer.IsJSON() {
@@ -489,6 +502,7 @@ func newMFCmd(opts *rootOptions) *cobra.Command {
 			return printer.Table([]string{"SIP_ID", "SYMBOL", "FREQUENCY", "AMOUNT", "INSTALMENTS", "PENDING", "STATUS", "NEXT_INSTALMENT"}, rows)
 		},
 	}
+	sipListCmd.Flags().IntVar(&sipListLimit, "limit", 0, "Limit number of rows (0 = no limit)")
 
 	var showSipID string
 	sipShowCmd := &cobra.Command{
@@ -539,10 +553,15 @@ func newMFCmd(opts *rootOptions) *cobra.Command {
 
 	sipsCmd.AddCommand(sipPlaceCmd, sipModifyCmd, sipCancelCmd, sipListCmd, sipShowCmd)
 
+	var holdingsLimit int
 	holdingsCmd := &cobra.Command{
 		Use:   "holdings",
 		Short: "List mutual fund holdings",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateLimit(holdingsLimit); err != nil {
+				return err
+			}
+
 			ctx, err := newCommandContext(opts)
 			if err != nil {
 				return err
@@ -561,6 +580,7 @@ func newMFCmd(opts *rootOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			holdings = applyLimit(holdings, holdingsLimit)
 
 			printer := ctx.printer(cmd.OutOrStdout())
 			if printer.IsJSON() {
@@ -586,8 +606,10 @@ func newMFCmd(opts *rootOptions) *cobra.Command {
 			return printer.Table([]string{"SYMBOL", "FUND", "FOLIO", "QTY", "AVG_PRICE", "LAST_PRICE", "PNL", "LAST_PRICE_DATE"}, rows)
 		},
 	}
+	holdingsCmd.Flags().IntVar(&holdingsLimit, "limit", 0, "Limit number of rows (0 = no limit)")
 
 	var holdingISIN string
+	var holdingShowLimit int
 	holdingShowCmd := &cobra.Command{
 		Use:   "show --isin <isin>",
 		Short: "Show breakdown for one mutual fund holding ISIN",
@@ -595,6 +617,9 @@ func newMFCmd(opts *rootOptions) *cobra.Command {
 			isin := strings.TrimSpace(holdingISIN)
 			if isin == "" {
 				return exitcode.New(exitcode.Validation, "--isin is required")
+			}
+			if err := validateLimit(holdingShowLimit); err != nil {
+				return err
 			}
 
 			ctx, err := newCommandContext(opts)
@@ -615,6 +640,7 @@ func newMFCmd(opts *rootOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			breakdown = applyLimit(breakdown, holdingShowLimit)
 
 			printer := ctx.printer(cmd.OutOrStdout())
 			if printer.IsJSON() {
@@ -640,11 +666,17 @@ func newMFCmd(opts *rootOptions) *cobra.Command {
 		},
 	}
 	holdingShowCmd.Flags().StringVar(&holdingISIN, "isin", "", "ISIN")
+	holdingShowCmd.Flags().IntVar(&holdingShowLimit, "limit", 0, "Limit number of rows (0 = no limit)")
 
+	var holdingISINsLimit int
 	holdingISINsCmd := &cobra.Command{
 		Use:   "isins",
 		Short: "List allotted MF ISINs",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateLimit(holdingISINsLimit); err != nil {
+				return err
+			}
+
 			ctx, err := newCommandContext(opts)
 			if err != nil {
 				return err
@@ -663,6 +695,7 @@ func newMFCmd(opts *rootOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			isins = applyLimit(isins, holdingISINsLimit)
 
 			printer := ctx.printer(cmd.OutOrStdout())
 			if printer.IsJSON() {
@@ -679,6 +712,7 @@ func newMFCmd(opts *rootOptions) *cobra.Command {
 			return printer.Table([]string{"ISIN"}, rows)
 		},
 	}
+	holdingISINsCmd.Flags().IntVar(&holdingISINsLimit, "limit", 0, "Limit number of rows (0 = no limit)")
 
 	holdingsCmd.AddCommand(holdingShowCmd, holdingISINsCmd)
 

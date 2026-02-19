@@ -14,10 +14,15 @@ func newOrdersCmd(opts *rootOptions) *cobra.Command {
 		Short: "Orderbook operations",
 	}
 
+	var listLimit int
 	listCmd := &cobra.Command{
 		Use:   "list",
 		Short: "List orders",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateLimit(listLimit); err != nil {
+				return err
+			}
+
 			ctx, err := newCommandContext(opts)
 			if err != nil {
 				return err
@@ -36,6 +41,7 @@ func newOrdersCmd(opts *rootOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			orders = applyLimit(orders, listLimit)
 
 			printer := ctx.printer(cmd.OutOrStdout())
 			if printer.IsJSON() {
@@ -72,14 +78,19 @@ func newOrdersCmd(opts *rootOptions) *cobra.Command {
 			}, rows)
 		},
 	}
+	listCmd.Flags().IntVar(&listLimit, "limit", 0, "Limit number of rows (0 = no limit)")
 
 	var showOrderID string
+	var showLimit int
 	showCmd := &cobra.Command{
 		Use:   "show --order-id <id>",
 		Short: "Show order history for an order ID",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if showOrderID == "" {
 				return exitcode.New(exitcode.Validation, "--order-id is required")
+			}
+			if err := validateLimit(showLimit); err != nil {
+				return err
 			}
 
 			ctx, err := newCommandContext(opts)
@@ -100,6 +111,7 @@ func newOrdersCmd(opts *rootOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			history = applyLimit(history, showLimit)
 
 			printer := ctx.printer(cmd.OutOrStdout())
 			if printer.IsJSON() {
@@ -121,12 +133,18 @@ func newOrdersCmd(opts *rootOptions) *cobra.Command {
 		},
 	}
 	showCmd.Flags().StringVar(&showOrderID, "order-id", "", "Order ID")
+	showCmd.Flags().IntVar(&showLimit, "limit", 0, "Limit number of rows (0 = no limit)")
 
 	var tradesOrderID string
+	var tradesLimit int
 	tradesCmd := &cobra.Command{
 		Use:   "trades",
 		Short: "List trades (optionally filtered by order ID)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateLimit(tradesLimit); err != nil {
+				return err
+			}
+
 			ctx, err := newCommandContext(opts)
 			if err != nil {
 				return err
@@ -158,6 +176,7 @@ func newOrdersCmd(opts *rootOptions) *cobra.Command {
 				}
 				trades = result
 			}
+			trades = applyLimit(trades, tradesLimit)
 
 			printer := ctx.printer(cmd.OutOrStdout())
 			if printer.IsJSON() {
@@ -184,6 +203,7 @@ func newOrdersCmd(opts *rootOptions) *cobra.Command {
 		},
 	}
 	tradesCmd.Flags().StringVar(&tradesOrderID, "order-id", "", "Filter trades for a specific order ID")
+	tradesCmd.Flags().IntVar(&tradesLimit, "limit", 0, "Limit number of rows (0 = no limit)")
 
 	ordersCmd.AddCommand(listCmd, showCmd, tradesCmd)
 	return ordersCmd

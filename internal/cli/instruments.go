@@ -17,6 +17,7 @@ func newInstrumentsCmd(opts *rootOptions) *cobra.Command {
 
 	var exchange string
 	var listAll bool
+	var listLimit int
 	listCmd := &cobra.Command{
 		Use:   "list",
 		Short: "Summarize instruments by exchange/type (default)",
@@ -26,6 +27,10 @@ func newInstrumentsCmd(opts *rootOptions) *cobra.Command {
 			"Use --all to print row-level instruments across all exchanges.",
 		}, " "),
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateLimit(listLimit); err != nil {
+				return err
+			}
+
 			ctx, err := newCommandContext(opts)
 			if err != nil {
 				return err
@@ -43,6 +48,9 @@ func newInstrumentsCmd(opts *rootOptions) *cobra.Command {
 				return exitcode.New(exitcode.Validation, "--exchange and --all cannot be used together")
 			}
 			outputRows := exchangeValue != "" || listAll
+			if listLimit > 0 && !outputRows {
+				return exitcode.New(exitcode.Validation, "--limit can only be used with --exchange or --all")
+			}
 
 			var instruments kiteconnect.Instruments
 			if exchangeValue == "" {
@@ -56,6 +64,9 @@ func newInstrumentsCmd(opts *rootOptions) *cobra.Command {
 			}
 			if err != nil {
 				return err
+			}
+			if outputRows {
+				instruments = applyLimit(instruments, listLimit)
 			}
 
 			printer := ctx.printer(cmd.OutOrStdout())
@@ -105,11 +116,17 @@ func newInstrumentsCmd(opts *rootOptions) *cobra.Command {
 	}
 	listCmd.Flags().StringVar(&exchange, "exchange", "", "Print row-level instruments for one exchange (NSE/BSE/NFO/MCX/...)")
 	listCmd.Flags().BoolVar(&listAll, "all", false, "Print row-level instruments across all exchanges (large output)")
+	listCmd.Flags().IntVar(&listLimit, "limit", 0, "Limit number of rows (0 = no limit, only with --exchange or --all)")
 
+	var mfLimit int
 	mfCmd := &cobra.Command{
 		Use:   "mf",
 		Short: "List mutual fund instruments",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateLimit(mfLimit); err != nil {
+				return err
+			}
+
 			ctx, err := newCommandContext(opts)
 			if err != nil {
 				return err
@@ -128,6 +145,7 @@ func newInstrumentsCmd(opts *rootOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			instruments = applyLimit(instruments, mfLimit)
 
 			printer := ctx.printer(cmd.OutOrStdout())
 			if printer.IsJSON() {
@@ -162,6 +180,7 @@ func newInstrumentsCmd(opts *rootOptions) *cobra.Command {
 			)
 		},
 	}
+	mfCmd.Flags().IntVar(&mfLimit, "limit", 0, "Limit number of rows (0 = no limit)")
 
 	instrumentsCmd.AddCommand(listCmd, mfCmd)
 	return instrumentsCmd

@@ -130,10 +130,15 @@ func newGttCmd(opts *rootOptions) *cobra.Command {
 	bindGTTFlags(modifyCmd, &modifyFlags)
 	modifyCmd.Flags().IntVar(&modifyTriggerID, "trigger-id", 0, "Trigger ID")
 
+	var listLimit int
 	listCmd := &cobra.Command{
 		Use:   "list",
 		Short: "List all GTT triggers",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateLimit(listLimit); err != nil {
+				return err
+			}
+
 			ctx, err := newCommandContext(opts)
 			if err != nil {
 				return err
@@ -152,6 +157,7 @@ func newGttCmd(opts *rootOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			gtts = applyLimit(gtts, listLimit)
 
 			printer := ctx.printer(cmd.OutOrStdout())
 			if printer.IsJSON() {
@@ -182,6 +188,7 @@ func newGttCmd(opts *rootOptions) *cobra.Command {
 			)
 		},
 	}
+	listCmd.Flags().IntVar(&listLimit, "limit", 0, "Limit number of rows (0 = no limit)")
 
 	var showTriggerID int
 	showCmd := &cobra.Command{

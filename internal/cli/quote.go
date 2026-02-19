@@ -172,11 +172,16 @@ func newQuoteCmd(opts *rootOptions) *cobra.Command {
 		hTo              string
 		hContinuous      bool
 		hOI              bool
+		hLimit           int
 	)
 	historicalCmd := &cobra.Command{
 		Use:   "historical",
 		Short: "Fetch historical candles by instrument token",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateLimit(hLimit); err != nil {
+				return err
+			}
+
 			if hInstrumentToken <= 0 {
 				return exitcode.New(exitcode.Validation, "--instrument-token must be greater than 0")
 			}
@@ -215,6 +220,7 @@ func newQuoteCmd(opts *rootOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			candles = applyLimit(candles, hLimit)
 
 			printer := ctx.printer(cmd.OutOrStdout())
 			if printer.IsJSON() {
@@ -245,6 +251,7 @@ func newQuoteCmd(opts *rootOptions) *cobra.Command {
 	historicalCmd.Flags().StringVar(&hTo, "to", "", "End timestamp (YYYY-MM-DD, YYYY-MM-DD HH:MM:SS, or RFC3339)")
 	historicalCmd.Flags().BoolVar(&hContinuous, "continuous", false, "Set continuous=true for continuous futures data")
 	historicalCmd.Flags().BoolVar(&hOI, "oi", false, "Include open interest")
+	historicalCmd.Flags().IntVar(&hLimit, "limit", 0, "Limit number of rows (0 = no limit)")
 
 	quoteCmd.AddCommand(getCmd, ltpCmd, ohlcCmd, historicalCmd)
 	return quoteCmd

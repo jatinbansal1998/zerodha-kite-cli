@@ -9,10 +9,15 @@ import (
 )
 
 func newPositionsCmd(opts *rootOptions) *cobra.Command {
+	var positionsLimit int
 	positionsCmd := &cobra.Command{
 		Use:   "positions",
 		Short: "List current positions",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateLimit(positionsLimit); err != nil {
+				return err
+			}
+
 			ctx, err := newCommandContext(opts)
 			if err != nil {
 				return err
@@ -31,6 +36,8 @@ func newPositionsCmd(opts *rootOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			positions.Net = applyLimit(positions.Net, positionsLimit)
+			positions.Day = applyLimit(positions.Day, positionsLimit)
 
 			printer := ctx.printer(cmd.OutOrStdout())
 			if printer.IsJSON() {
@@ -57,6 +64,7 @@ func newPositionsCmd(opts *rootOptions) *cobra.Command {
 			return printer.Table([]string{"SYMBOL", "EXCHANGE", "PRODUCT", "QTY", "AVG_PRICE", "LTP", "PNL"}, rows)
 		},
 	}
+	positionsCmd.Flags().IntVar(&positionsLimit, "limit", 0, "Limit number of rows (0 = no limit)")
 
 	var (
 		exchange     string

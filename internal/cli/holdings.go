@@ -10,10 +10,15 @@ import (
 )
 
 func newHoldingsCmd(opts *rootOptions) *cobra.Command {
+	var holdingsLimit int
 	holdingsCmd := &cobra.Command{
 		Use:   "holdings",
 		Short: "List current holdings",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateLimit(holdingsLimit); err != nil {
+				return err
+			}
+
 			ctx, err := newCommandContext(opts)
 			if err != nil {
 				return err
@@ -32,6 +37,7 @@ func newHoldingsCmd(opts *rootOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			holdings = applyLimit(holdings, holdingsLimit)
 
 			printer := ctx.printer(cmd.OutOrStdout())
 			if printer.IsJSON() {
@@ -58,11 +64,17 @@ func newHoldingsCmd(opts *rootOptions) *cobra.Command {
 				rows)
 		},
 	}
+	holdingsCmd.Flags().IntVar(&holdingsLimit, "limit", 0, "Limit number of rows (0 = no limit)")
 
+	var auctionsLimit int
 	auctionsCmd := &cobra.Command{
 		Use:   "auctions",
 		Short: "List auction-eligible holdings",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateLimit(auctionsLimit); err != nil {
+				return err
+			}
+
 			ctx, err := newCommandContext(opts)
 			if err != nil {
 				return err
@@ -81,6 +93,7 @@ func newHoldingsCmd(opts *rootOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			instruments = applyLimit(instruments, auctionsLimit)
 
 			printer := ctx.printer(cmd.OutOrStdout())
 			if printer.IsJSON() {
@@ -109,6 +122,7 @@ func newHoldingsCmd(opts *rootOptions) *cobra.Command {
 			)
 		},
 	}
+	auctionsCmd.Flags().IntVar(&auctionsLimit, "limit", 0, "Limit number of rows (0 = no limit)")
 
 	var (
 		authType         string
