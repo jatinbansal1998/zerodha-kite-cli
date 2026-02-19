@@ -2,6 +2,7 @@ package updater
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -55,11 +56,21 @@ func StartBackground(opts Options) {
 		return
 	}
 
-	go run(normalized)
+	go func() {
+		_, _ = run(normalized, false)
+	}()
 }
 
 func LoadState(cacheDir string) (State, error) {
 	return NewStateStore(cacheDir).Load()
+}
+
+func RunManual(opts Options) (State, error) {
+	normalized, ok := normalizeOptions(opts)
+	if !ok {
+		return State{}, errors.New("manual update options are incomplete")
+	}
+	return run(normalized, true)
 }
 
 func normalizeOptions(opts Options) (normalizedOptions, bool) {
@@ -111,27 +122,27 @@ func normalizeOptions(opts Options) (normalizedOptions, bool) {
 	}, true
 }
 
-func run(opts normalizedOptions) {
+func run(opts normalizedOptions, forceCheck bool) (State, error) {
 	store := NewStateStore(opts.CacheDir)
 	state, err := store.Load()
 	if err != nil {
 		state = State{}
 		setStateError(&state, err)
 		_ = store.Save(state)
-		return
+		return state, err
 	}
 	state.CurrentVersion = opts.CurrentVersion
 
 	if err := tryApplyStagedUpdate(&state, store, opts); err != nil {
 		setStateError(&state, err)
 		_ = store.Save(state)
-		return
+		return state, err
 	}
 
 	now := time.Now().UTC()
-	if !state.LastCheckedAt.IsZero() && now.Sub(state.LastCheckedAt) < opts.Cooldown {
+	if !forceCheck && !state.LastCheckedAt.IsZero() && now.Sub(state.LastCheckedAt) < opts.Cooldown {
 		_ = store.Save(state)
-		return
+		return state, nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
@@ -142,14 +153,14 @@ func run(opts normalizedOptions) {
 	if err != nil {
 		setStateError(&state, err)
 		_ = store.Save(state)
-		return
+		return state, err
 	}
 	state.LatestVersionSeen = release.TagName
 
 	if !IsNewerVersion(release.TagName, opts.CurrentVersion) {
 		clearStateError(&state)
 		_ = store.Save(state)
-		return
+		return state, nil
 	}
 
 	if state.ApplyPending &&
@@ -157,32 +168,33 @@ func run(opts normalizedOptions) {
 		strings.TrimSpace(state.DownloadedAsset) != "" {
 		clearStateError(&state)
 		_ = store.Save(state)
-		return
+		return state, nil
 	}
 
 	asset, err := SelectAssetForPlatform(release.Assets, runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		setStateError(&state, err)
 		_ = store.Save(state)
-		return
+		return state, err
 	}
 
 	stagePath, err := store.StagingPath(release.TagName, asset.Name)
 	if err != nil {
 		setStateError(&state, err)
 		_ = store.Save(state)
-		return
+		return state, err
 	}
 
 	if err := downloadAssetToPath(ctx, opts.HTTPClient, asset.DownloadURL, stagePath); err != nil {
 		setStateError(&state, err)
 		_ = store.Save(state)
-		return
+		return state, err
 	}
 	if err := os.Chmod(stagePath, 0o755); err != nil {
-		setStateError(&state, fmt.Errorf("mark downloaded binary executable: %w", err))
+		cause := fmt.Errorf("mark downloaded binary executable: %w", err)
+		setStateError(&state, cause)
 		_ = store.Save(state)
-		return
+		return state, cause
 	}
 
 	state.DownloadedVersion = release.TagName
@@ -194,10 +206,11 @@ func run(opts normalizedOptions) {
 	if err := tryApplyStagedUpdate(&state, store, opts); err != nil {
 		setStateError(&state, err)
 		_ = store.Save(state)
-		return
+		return state, err
 	}
 	clearStateError(&state)
 	_ = store.Save(state)
+	return state, nil
 }
 
 func tryApplyStagedUpdate(state *State, store *StateStore, opts normalizedOptions) error {

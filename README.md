@@ -56,6 +56,14 @@ This repository pins the Go toolchain in `go.mod` via:
 go build ./cmd/zerodha
 ```
 
+## Manual Update
+
+Run an on-demand self-update check and apply the latest release:
+
+```bash
+zerodha update
+```
+
 ## Config and Cache
 
 - Config file: `~/.config/zerodha/config.json`

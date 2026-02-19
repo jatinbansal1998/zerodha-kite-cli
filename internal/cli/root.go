@@ -46,6 +46,7 @@ func newRootCmd() *cobra.Command {
 	rootCmd.AddCommand(
 		newSelfUpdateApplyCmd(),
 		newVersionCmd(),
+		newUpdateCmd(opts),
 		newAuthCmd(opts),
 		newConfigCmd(opts),
 		newProfileCmd(opts),
@@ -64,7 +65,7 @@ func newRootCmd() *cobra.Command {
 }
 
 func shouldRunAutoUpdate(cmd *cobra.Command) bool {
-	if cmd != nil && cmd.Name() == updater.HelperCommandName() {
+	if cmd != nil && (cmd.Name() == updater.HelperCommandName() || cmd.Name() == "update") {
 		return false
 	}
 
