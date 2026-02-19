@@ -4,9 +4,44 @@ CLI-based tooling for Zerodha Kite workflows.
 
 > **Note**: This is an unofficial implementation. It uses the official Go SDK [gokiteconnect](https://github.com/zerodha/gokiteconnect).
 
-## Prerequisites
+## Prerequisites (Build from Source)
 
 - Go `1.26.0` (exact version)
+
+## Install (Prebuilt Binary)
+
+Install the latest release without cloning the repo or building from source.
+
+Linux/macOS (curl):
+```bash
+curl -fsSL https://raw.githubusercontent.com/jatinbansal1998/zerodha-kite-cli/main/scripts/install.sh | sh
+```
+
+Linux/macOS (wget):
+```bash
+wget -qO- https://raw.githubusercontent.com/jatinbansal1998/zerodha-kite-cli/main/scripts/install.sh | sh
+```
+
+Linux/macOS (pin a specific version):
+```bash
+curl -fsSL https://raw.githubusercontent.com/jatinbansal1998/zerodha-kite-cli/main/scripts/install.sh | sh -s -- --version v1.2.3
+```
+
+Windows PowerShell:
+```powershell
+irm https://raw.githubusercontent.com/jatinbansal1998/zerodha-kite-cli/main/scripts/install.ps1 | iex
+```
+
+Windows CMD:
+```bat
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/jatinbansal1998/zerodha-kite-cli/main/scripts/install.ps1 | iex"
+```
+
+Windows PowerShell (pin a specific version):
+```powershell
+$env:ZERODHA_VERSION='v1.2.3'
+irm https://raw.githubusercontent.com/jatinbansal1998/zerodha-kite-cli/main/scripts/install.ps1 | iex
+```
 
 ## Toolchain
 
